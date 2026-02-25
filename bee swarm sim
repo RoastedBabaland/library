@@ -7299,9 +7299,9 @@ v64.StartStatusUpdater = function(v876)
 				task.wait(1503.1 - (957 + 546));
 			end
 		end);
-		while v876['isRunning'] do
+while v876['isRunning'] do
 			if v876['autoFarmEnabled'] then
-				local v2146 = pcall(function()
+				pcall(function()
 					local v2342 = game['Players']['LocalPlayer'];
 					local v2343 = v2342['Character'];
 					if v2343 then
@@ -7313,7 +7313,7 @@ v64.StartStatusUpdater = function(v876)
 							if (v2923 and v2924) then
 								local v3120 = math.floor(v2923.Value);
 								local v3121 = math.floor(v2924.Value);
-								local v3122 = math.floor((v3120 / v3121) * (422 - 322));
+								local v3122 = (v3121 > 0) and math.floor((v3120 / v3121) * 100) or 0;
 								local v3123 = string.format("Farming | %d%% (%d/%d)", v3122, v3120, v3121);
 								if (v876['status'] ~= v3123) then
 									v876['status'] = v3123;
@@ -7324,11 +7324,10 @@ v64.StartStatusUpdater = function(v876)
 							end
 						end
 					end
-					v876['uptime'] = v1:GetUptime();
+					if v1 and type(v1.GetUptime) == "function" then
+						v876['uptime'] = v1:GetUptime();
+					end
 				end);
-				if not v2146 then
-					warn("Status updater error (non-fatal)");
-				end
 			end
 			task.wait(1 + 0);
 		end
