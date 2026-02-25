@@ -1,3 +1,39 @@
+local AFK_TIME_LIMIT = 600 -- The game kicks after 10 minutes (600 seconds). We'll act before this.
+local ACTION_INTERVAL = 300 -- Perform an anti-AFK action every 5 minutes (300 seconds).
+
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+
+local Player = Players.LocalPlayer
+local lastActionTime = os.clock()
+
+print("paint Anti-AFK: Active. Performing an action every " .. ACTION_INTERVAL .. " seconds.")
+
+-- The main anti-AFK loop
+RunService.Heartbeat:Connect(function()
+    -- Check if enough time has passed since the last action
+    if os.clock() - lastActionTime >= ACTION_INTERVAL then
+        local character = Player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            -- Action 1: Simulate a tiny mouse movement
+            VirtualInputManager:MoveMouse(1, 1)
+            task.wait(0.1)
+            VirtualInputManager:MoveMouse(-1, -1)
+            
+            -- Action 2: Simulate a jump (less intrusive)
+            humanoid.Jump = true
+
+            lastActionTime = os.clock() -- Reset the timer
+            print("paint Anti-AFK: Performed anti-AFK action.")
+        end
+    end
+end)
+
 local v0 = "Version 1.1.9 - w2";
 local v7 = {};
 local v8 = {};
