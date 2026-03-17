@@ -1,0 +1,762 @@
+-- ╔══════════════════════════════════════════════╗
+-- ║   MOD + CHEAT DETECTOR  |  Matcha LuaVM     ║
+-- ╚══════════════════════════════════════════════╝
+
+local CHECK_INTERVAL = 10
+local MAX_ROWS       = 8
+local ROW_H          = 18
+
+local C_BG     = Color3.fromRGB(12, 12, 18)
+local C_HEAD   = Color3.fromRGB(25, 20, 35)
+local C_BORDER = Color3.fromRGB(90, 55, 140)
+local C_TITLE  = Color3.fromRGB(185, 140, 255)
+local C_DIM    = Color3.fromRGB(110, 110, 130)
+local C_WHITE  = Color3.fromRGB(225, 225, 225)
+local C_GREEN  = Color3.fromRGB(80, 210, 100)
+
+local TAG_COLORS = {
+    ["MOD(100%)"]    = Color3.fromRGB(255, 60,  60),
+    ["MOD(INVIS)"]   = Color3.fromRGB(255, 60,  60),
+    ["MOD(POSSIBLE)"]= Color3.fromRGB(255, 60,  60),
+    ["CHEATER(100%)"]= Color3.fromRGB(180, 0,   255),
+    ["CHEATER(KDR+)"]= Color3.fromRGB(80,  210, 100),
+    ["CHEATER(KDR)"] = Color3.fromRGB(255, 165, 30),
+    ["CHEATER(G)"]   = Color3.fromRGB(0,   150, 255),
+    ["CHEATER(H)"]   = Color3.fromRGB(0,   60,  180),
+}
+local function tagColor(tag)
+    return TAG_COLORS[tag] or Color3.fromRGB(255, 165, 30)
+end
+
+local PW     = 340
+local HEAD_H = 26
+local COL_H  = 16
+local FOOT_H = 18
+local ROWS_Y = HEAD_H + COL_H + 4
+local FOOT_Y = ROWS_Y + MAX_ROWS * ROW_H + 2
+local FOOT2_Y = FOOT_Y  + FOOT_H
+local FOOT3_Y = FOOT2_Y + FOOT_H
+local FOOT4_Y = FOOT3_Y + FOOT_H
+local FOOT5_Y = FOOT4_Y + FOOT_H
+local FOOT6_Y = FOOT5_Y + FOOT_H
+local MAIN_H  = FOOT6_Y + FOOT_H + 2
+local PX = 10
+local PY = 60
+
+local Moderators     = {}
+local Cheaters       = {}
+local cheaterKDR     = {}
+local espReason      = {}
+local modWarnings    = {}
+local checkedPremium = {}
+local flaggedList    = {}
+local scrollOffset   = 0
+local modFound       = false
+
+local RS  = game:GetService("ReplicatedStorage")
+local PLR = game:GetService("Players")
+local WS  = game:GetService("Workspace")
+
+local function sendNotif(title, msg, dur) notify(msg, title, dur or 5) end
+local function getLocalPlayer()
+    local ok, r = pcall(function() return PLR.LocalPlayer end)
+    return ok and r or nil
+end
+local function getPlayers()
+    local ok, r = pcall(function() return PLR:GetPlayers() end)
+    return ok and r or {}
+end
+local function addToList(name, tag, reason)
+    for _, e in ipairs(flaggedList) do
+        if e.name == name then e.tag = tag e.reason = reason return end
+    end
+    table.insert(flaggedList, 1, {name=name, tag=tag, reason=reason})
+end
+local function disableWallhacks()
+    pcall(function() ESP.Enabled=false end) pcall(function() Chams.Enabled=false end)
+    pcall(function() Wallhack.Enabled=false end) pcall(function() ESP.Box.Enabled=false end)
+    pcall(function() ESP.Name.Enabled=false end) pcall(function() ESP.Health.Enabled=false end)
+    pcall(function() ESP.Distance.Enabled=false end) pcall(function() ESP.Skeleton.Enabled=false end)
+    pcall(function() Chams.Players.Enabled=false end) pcall(function() Chams.World.Enabled=false end)
+end
+local recoilOriginal={} local spreadOriginal={}
+local function applyRecoil(on)
+    pcall(function()
+        for _,ammo in ipairs(RS.AmmoTypes:GetChildren()) do
+            if on then
+                if not recoilOriginal[ammo] then recoilOriginal[ammo]=ammo:GetAttribute("RecoilStrength") end
+                if not spreadOriginal[ammo] then
+                    spreadOriginal[ammo]={
+                        AccuracyDeviation=ammo:GetAttribute("AccuracyDeviation"),
+                        ProjectileDrop=ammo:GetAttribute("ProjectileDrop"),
+                        MuzzleVelocity=ammo:GetAttribute("MuzzleVelocity"),
+                        Drag=ammo:GetAttribute("Drag"),
+                    }
+                end
+                ammo:SetAttribute("RecoilStrength",0)
+                ammo:SetAttribute("AccuracyDeviation",0)
+                ammo:SetAttribute("ProjectileDrop",0)
+                ammo:SetAttribute("MuzzleVelocity",9999)
+                ammo:SetAttribute("Drag",0.001)
+            else
+                if recoilOriginal[ammo] then ammo:SetAttribute("RecoilStrength",recoilOriginal[ammo]) end
+                if spreadOriginal[ammo] then
+                    ammo:SetAttribute("AccuracyDeviation",spreadOriginal[ammo].AccuracyDeviation)
+                    ammo:SetAttribute("ProjectileDrop",spreadOriginal[ammo].ProjectileDrop)
+                    ammo:SetAttribute("MuzzleVelocity",spreadOriginal[ammo].MuzzleVelocity)
+                    ammo:SetAttribute("Drag",spreadOriginal[ammo].Drag)
+                end
+            end
+        end
+    end)
+end
+
+local function onModDetected(name)
+    if not modFound then modFound=true disableWallhacks()
+        sendNotif("MOD DETECTED","Mod found: "..name.." — wallhacks disabled.",8) end
+end
+
+-- ─── CHEAT DETECTOR ───────────────────────────
+local function r43_0(player, localPlayer)
+    if player==localPlayer then return end
+    if Cheaters[player.Name] then return end
+    local r1_5=RS.Players:FindFirstChild(player.Name) if not r1_5 then return end
+    local r2_5=r1_5:FindFirstChild("Status") if not r2_5 then return end
+    r2_5=r2_5:FindFirstChild("Journey") if not r2_5 then return end
+    local statsNode=r2_5:FindFirstChild("Statistics") if not statsNode then return end
+    local deaths=statsNode:GetAttribute("Deaths") or 0 if deaths==0 then deaths=1 end
+    local kills=statsNode:GetAttribute("Kills") or 0 if kills==0 then kills=1 end
+    local kdr=math.floor(kills/deaths*10)/10
+    local hours=math.floor((statsNode:GetAttribute("TimePlayed") or 0)/3600)
+    local isPremium=false
+    pcall(function()
+        local passes=r1_5:FindFirstChild("Status")
+        passes=passes and passes:FindFirstChild("Purchases")
+        passes=passes and passes:FindFirstChild("Passes")
+        if passes then
+            for _,attr in ipairs(passes:GetAttributes()) do
+                if passes:GetAttribute(attr)==true then isPremium=true break end
+            end
+        end
+    end)
+    local function flag(tag,reason)
+        Cheaters[player.Name]=true cheaterKDR[player.Name]=kdr
+        espReason[player.Name]=tag.." "..reason
+        addToList(player.Name,tag,reason)
+        sendNotif("Cheat | Detector ("..tag..")","Player: "..player.Name.." suspected! ("..reason..")",5)
+        print("Cheat Detector ("..tag..") "..player.Name.." "..reason)
+    end
+    if kills>=15 and kdr>=5 then flag("CHEATER(100%)","KDR:"..kdr) return end
+    if kills>=400 and hours<30 then flag("CHEATER(G)","K:"..kills.." H:"..hours) return end
+    if kills>=250 and hours<20 then flag("CHEATER(H)","K:"..kills.." H:"..hours) return end
+    if isPremium then
+        if kdr>=3 and hours<100  then flag("CHEATER(KDR+)","KDR:"..kdr.." H:"..hours) return end
+        if kdr>=2 and hours<=50  then flag("CHEATER(KDR+)","KDR:"..kdr.." H:"..hours) return end
+        if hours<5 and kdr>2.5   then flag("CHEATER(KDR+)","H:"..hours.." KDR:"..kdr) return end
+    else
+        if kdr>=3 and hours<100  then flag("CHEATER(KDR)","KDR:"..kdr.." H:"..hours) return end
+        if kdr>=2 and hours<=50  then flag("CHEATER(KDR)","KDR:"..kdr.." H:"..hours) return end
+        if hours<5 and kdr>2.5   then flag("CHEATER(KDR)","H:"..hours.." KDR:"..kdr) return end
+    end
+end
+
+-- ─── MOD DETECTOR ─────────────────────────────
+local BODY_PARTS={Head=true,LeftFoot=true,LeftHand=true,LeftLowerArm=true,LeftLowerLeg=true,
+    LeftUpperArm=true,LeftUpperLeg=true,LowerTorso=true,RightFoot=true,
+    RightHand=true,RightLowerArm=true,RightUpperArm=true,RightUpperLeg=true,UpperTorso=true}
+local function r46_0()
+    local localPlayer=getLocalPlayer()
+    for _,r4 in ipairs(getPlayers()) do
+        pcall(r43_0,r4,localPlayer)
+        if not r4.Character then continue end
+        if not modWarnings[r4.Name] then modWarnings[r4.Name]=1 end
+        if not Moderators[r4.Name] and not checkedPremium[r4.Name] then
+            pcall(function()
+                local s=RS.Players:FindFirstChild(r4.Name) s=s and s:FindFirstChild("Status")
+                local gv=s and s:FindFirstChild("GameplayVariables")
+                if gv and gv:GetAttribute("GodMode")==true then
+                    Moderators[r4.Name]=true espReason[r4.Name]="MOD(POSSIBLE) GodMode"
+                    addToList(r4.Name,"MOD(POSSIBLE)","GodMode") onModDetected(r4.Name)
+                    sendNotif("Possible Mod (GodMode)",r4.Name.." has GodMode!",8)
+                end
+            end)
+        end
+        if modWarnings[r4.Name]<5 then
+            pcall(function()
+                local char=r4.Character
+                local hum=char:FindFirstChildOfClass("Humanoid")
+                if not hum or hum.Health<=0 then return end
+                local state=hum:GetState()
+                if state==Enum.HumanoidStateType.Dead then return end
+                if state==Enum.HumanoidStateType.None then return end
+                if state==Enum.HumanoidStateType.GettingUp then return end
+                for _,p in pairs(char:GetChildren()) do
+                    if BODY_PARTS[p.Name] and 1<=p.Transparency then
+                        Moderators[r4.Name]=true modWarnings[r4.Name]=modWarnings[r4.Name]+1
+                        espReason[r4.Name]="MOD(INVIS) Invis"
+                        addToList(r4.Name,"MOD(INVIS)","Invis") onModDetected(r4.Name)
+                        sendNotif("Mod Detector (B)","Mod Detected: "..r4.Name)
+                        sendNotif("Mod Detector (B)","Mod Detected: "..r4.Name)
+                        sendNotif("Mod Detector (B)","Mod Detected: "..r4.Name)
+                        return
+                    end
+                end
+            end)
+        end
+        checkedPremium[r4.Name]=true
+    end
+end
+
+-- ─── ESP ──────────────────────────────────────
+local espObjs={}
+-- cache flaggedList as a dict for O(1) lookup instead of O(n) search every frame
+local flaggedDict={}
+local function updateESP()
+    -- rebuild dict from flaggedList (only changes when someone is flagged)
+    flaggedDict={}
+    for _,fe in ipairs(flaggedList) do flaggedDict[fe.name]=fe end
+    local active={}
+    for _,player in ipairs(getPlayers()) do
+        local isMod=Moderators[player.Name] local isCheat=Cheaters[player.Name]
+        if not(isMod or isCheat) then continue end
+        active[player.Name]=true
+        local char,hrp
+        pcall(function() char=player.Character hrp=char and char:FindFirstChild("HumanoidRootPart") end)
+        if not hrp then
+            if espObjs[player.Name] then espObjs[player.Name].tag.Visible=false end
+            continue
+        end
+        local sp,on=WorldToScreen(hrp.Position+Vector3.new(0,3.4,0))
+        if not espObjs[player.Name] then
+            local t=Drawing.new("Text")
+            t.Font=Drawing.Fonts.SystemBold t.Size=12 t.Outline=true t.Center=true t.Visible=false
+            espObjs[player.Name]={tag=t}
+        end
+        local e=espObjs[player.Name]
+        local fe=flaggedDict[player.Name]
+        local playerTag=fe and fe.tag or nil
+        local playerReason=fe and fe.reason or ""
+        local col=tagColor(playerTag or "")
+        if on then
+            local label
+            if playerTag and playerTag:sub(1,3)=="MOD" then label="MOD"
+            else
+                local kdr=playerReason:match("KDR:([%d%.]+)")
+                local h=playerReason:match("H:([%d]+)")
+                if kdr and h then label="CHEATER  KD:"..kdr.."  H:"..h
+                elseif kdr then label="CHEATER  KD:"..kdr
+                else label="CHEATER" end
+            end
+            if e.tag.Text~=label then e.tag.Text=label end
+            if e.tag.Color~=col then e.tag.Color=col end
+            e.tag.Position=Vector2.new(sp.X,sp.Y-13)
+            if not e.tag.Visible then e.tag.Visible=true end
+        else
+            if e.tag.Visible then e.tag.Visible=false end
+        end
+    end
+    for name,e in pairs(espObjs) do if not active[name] then e.tag.Visible=false end end
+end
+
+-- ─── DRAWING HELPERS ──────────────────────────
+local allObjs={}
+local function regLine(obj,oy) table.insert(allObjs,{obj=obj,oy=oy,isLine=true}) return obj end
+local function regObj(obj,ox,oy) table.insert(allObjs,{obj=obj,ox=ox,oy=oy,isLine=false}) return obj end
+local function sq(x,y,w,h,col,filled,corner,trans)
+    local s=Drawing.new("Square") s.Position=Vector2.new(x,y) s.Size=Vector2.new(w,h)
+    s.Color=col s.Filled=filled~=false s.Corner=corner or 0 s.Transparency=trans or 1 s.Visible=true return s
+end
+local function tx(str,x,y,sz,col,outline,font)
+    local t=Drawing.new("Text") t.Text=str t.Position=Vector2.new(x,y) t.Size=sz or 13
+    t.Color=col or C_WHITE t.Outline=outline~=false t.Center=false
+    t.Font=font or Drawing.Fonts.System t.Visible=true return t
+end
+local function ln(x1,y1,x2,y2,col)
+    local l=Drawing.new("Line") l.From=Vector2.new(x1,y1) l.To=Vector2.new(x2,y2)
+    l.Color=col or C_BORDER l.Thickness=1 l.Visible=true return l
+end
+
+-- ─── BUILD PANEL ──────────────────────────────
+local g={} local guiOpen=true local BTN_SIZE=14
+g.bg     = regObj(sq(PX,PY,PW,MAIN_H,C_BG,true,6,0.90),0,0)
+g.border = regObj(sq(PX,PY,PW,MAIN_H,C_BORDER,false,6,1),0,0) g.border.Thickness=1
+g.headBg = regObj(sq(PX,PY,PW,HEAD_H,C_HEAD,true,6,1),0,0)
+g.title  = regObj(tx("  MOD + CHEAT DETECTOR",PX+6,PY+6,14,C_TITLE,true,Drawing.Fonts.SystemBold),6,6)
+g.status = regObj(tx("Waiting...",PX+PW-72,PY+8,11,C_DIM,true,Drawing.Fonts.System),PW-72,8)
+g.div1   = regLine(ln(PX,PY+HEAD_H,PX+PW,PY+HEAD_H),HEAD_H)
+g.btnBg  = sq(PX+PW-BTN_SIZE-3,PY+6,BTN_SIZE,BTN_SIZE,Color3.fromRGB(180,40,40),true,3,1)
+g.btnTx  = tx("×",PX+PW-BTN_SIZE-3+3,PY+6,12,C_WHITE,true,Drawing.Fonts.SystemBold)
+local cy=HEAD_H+2
+g.cName=regObj(tx("Player",PX+6,PY+cy,11,C_DIM,false,Drawing.Fonts.System),6,cy)
+g.cTag =regObj(tx("Type",PX+170,PY+cy,11,C_DIM,false,Drawing.Fonts.System),170,cy)
+g.cRsn =regObj(tx("Reason",PX+255,PY+cy,11,C_DIM,false,Drawing.Fonts.System),255,cy)
+g.div2 =regLine(ln(PX,PY+HEAD_H+COL_H+2,PX+PW,PY+HEAD_H+COL_H+2),HEAD_H+COL_H+2)
+g.clip =regObj(sq(PX+2,PY+ROWS_Y,PW-4,MAX_ROWS*ROW_H,C_BG,true,0,1),2,ROWS_Y)
+g.rows={}
+for i=1,MAX_ROWS do
+    local oy=ROWS_Y+(i-1)*ROW_H
+    local rbg=regObj(sq(PX+2,PY+oy,PW-4,ROW_H-1,i%2==0 and Color3.fromRGB(20,18,28) or Color3.fromRGB(15,14,22),true,0,0.45),2,oy)
+    local nl=regObj(tx("",PX+6,PY+oy+2,12,C_WHITE,true,Drawing.Fonts.System),6,oy+2)
+    local tl=regObj(tx("",PX+170,PY+oy+2,11,C_WHITE,true,Drawing.Fonts.SystemBold),170,oy+2)
+    local rl=regObj(tx("",PX+255,PY+oy+2,10,C_DIM,false,Drawing.Fonts.System),255,oy+2)
+    nl.Visible=false tl.Visible=false rl.Visible=false
+    g.rows[i]={bg=rbg,name=nl,tag=tl,reason=rl}
+end
+g.div3  =regLine(ln(PX,PY+FOOT_Y,PX+PW,PY+FOOT_Y),FOOT_Y)
+g.footer=regObj(tx("◄ 0 mods  |  0 cheaters  ►",PX+6,PY+FOOT_Y+3,10,C_DIM,false,Drawing.Fonts.System),6,FOOT_Y+3)
+g.espLbl=regObj(tx("ESP: ON",PX+PW-56,PY+FOOT_Y+3,10,C_GREEN,false,Drawing.Fonts.SystemBold),PW-56,FOOT_Y+3)
+g.div4  =regLine(ln(PX,PY+FOOT2_Y,PX+PW,PY+FOOT2_Y),FOOT2_Y)
+g.invOn =regObj(tx("1 INV ON",PX+6,PY+FOOT2_Y+3,10,C_GREEN,false,Drawing.Fonts.SystemBold),6,FOOT2_Y+3)
+g.invOff=regObj(tx("2 INV OFF",PX+75,PY+FOOT2_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),75,FOOT2_Y+3)
+g.invStat=regObj(tx("INV:OFF",PX+PW-55,PY+FOOT2_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),PW-55,FOOT2_Y+3)
+g.div5     =regLine(ln(PX,PY+FOOT3_Y,PX+PW,PY+FOOT3_Y),FOOT3_Y)
+g.corpseOn =regObj(tx("3 CORPSE ON",PX+6,PY+FOOT3_Y+3,10,C_GREEN,false,Drawing.Fonts.SystemBold),6,FOOT3_Y+3)
+g.corpseOff=regObj(tx("4 CORPSE OFF",PX+90,PY+FOOT3_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),90,FOOT3_Y+3)
+g.corpseStat=regObj(tx("CORPSE:OFF",PX+PW-75,PY+FOOT3_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),PW-75,FOOT3_Y+3)
+g.div6    =regLine(ln(PX,PY+FOOT4_Y,PX+PW,PY+FOOT4_Y),FOOT4_Y)
+g.zoomIn  =regObj(tx("5 ZOOM +",PX+6,PY+FOOT4_Y+3,10,C_GREEN,false,Drawing.Fonts.SystemBold),6,FOOT4_Y+3)
+g.zoomOut =regObj(tx("6 ZOOM -",PX+75,PY+FOOT4_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),75,FOOT4_Y+3)
+g.zoomBind=regObj(tx("[Z]",PX+148,PY+FOOT4_Y+3,10,C_DIM,false,Drawing.Fonts.SystemBold),148,FOOT4_Y+3)
+g.zoomStat=regObj(tx("FOV:50",PX+PW-55,PY+FOOT4_Y+3,10,C_DIM,false,Drawing.Fonts.SystemBold),PW-55,FOOT4_Y+3)
+g.zoomEnStat=regObj(tx("Z:ON",PX+210,PY+FOOT4_Y+3,10,C_GREEN,false,Drawing.Fonts.SystemBold),210,FOOT4_Y+3)
+g.div7    =regLine(ln(PX,PY+FOOT5_Y,PX+PW,PY+FOOT5_Y),FOOT5_Y)
+g.testInvis=regObj(tx("TEST INVIS",PX+6,PY+FOOT5_Y+3,10,Color3.fromRGB(255,200,0),false,Drawing.Fonts.SystemBold),6,FOOT5_Y+3)
+g.testInvisRes=regObj(tx("",PX+150,PY+FOOT5_Y+3,10,C_DIM,false,Drawing.Fonts.SystemBold),150,FOOT5_Y+3)
+g.div8      =regLine(ln(PX,PY+FOOT6_Y,PX+PW,PY+FOOT6_Y),FOOT6_Y)
+g.recoilBtn =regObj(tx("RECOIL:OFF",PX+6,PY+FOOT6_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),6,FOOT6_Y+3)
+g.spreadBtn =regObj(tx("SPREAD:OFF",PX+110,PY+FOOT6_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),110,FOOT6_Y+3)
+
+
+local invEnabled=false local corpseEnabled=false local recoilSpreadEnabled=false
+
+local zoomSteps = {1,5,10,15,20,30,40,50,60,70,80,90}
+local zoomStepIdx = 8
+local zoomFOV = zoomSteps[zoomStepIdx]
+local MAX_FOV=90 local zoomHeld=false local zoomEnabled=true
+local zoomKeyCode = Enum.KeyCode.Z
+local zoomBinding = false
+
+local TAB_W,TAB_H=80,18
+g.tabBg =sq(PX,PY,TAB_W,TAB_H,C_HEAD,true,4,1)
+g.tabBdr=sq(PX,PY,TAB_W,TAB_H,C_BORDER,false,4,1) g.tabBdr.Thickness=1
+g.tabTx =tx("DETECTOR",PX+6,PY+3,10,C_TITLE,false,Drawing.Fonts.SystemBold)
+g.tabBg.Visible=false g.tabBdr.Visible=false g.tabTx.Visible=false
+
+-- ─── ZOOM ─────────────────────────────────────
+local UIS2=game:GetService("UserInputService")
+UIS2.InputBegan:Connect(function(input,gpe)
+    if gpe then return end
+    if zoomBinding then
+        local kc = input.KeyCode
+        local kcMap = {}
+        local function tryAdd(e,n) pcall(function() if e then kcMap[e]=n end end) end
+        tryAdd(Enum.KeyCode.A,"A") tryAdd(Enum.KeyCode.B,"B") tryAdd(Enum.KeyCode.C,"C")
+        tryAdd(Enum.KeyCode.D,"D") tryAdd(Enum.KeyCode.E,"E") tryAdd(Enum.KeyCode.F,"F")
+        tryAdd(Enum.KeyCode.G,"G") tryAdd(Enum.KeyCode.H,"H") tryAdd(Enum.KeyCode.I,"I")
+        tryAdd(Enum.KeyCode.J,"J") tryAdd(Enum.KeyCode.K,"K") tryAdd(Enum.KeyCode.L,"L")
+        tryAdd(Enum.KeyCode.M,"M") tryAdd(Enum.KeyCode.N,"N") tryAdd(Enum.KeyCode.O,"O")
+        tryAdd(Enum.KeyCode.P,"P") tryAdd(Enum.KeyCode.Q,"Q") tryAdd(Enum.KeyCode.R,"R")
+        tryAdd(Enum.KeyCode.S,"S") tryAdd(Enum.KeyCode.T,"T") tryAdd(Enum.KeyCode.U,"U")
+        tryAdd(Enum.KeyCode.V,"V") tryAdd(Enum.KeyCode.W,"W") tryAdd(Enum.KeyCode.X,"X")
+        tryAdd(Enum.KeyCode.Y,"Y") tryAdd(Enum.KeyCode.Z,"Z")
+        tryAdd(Enum.KeyCode.F1,"F1") tryAdd(Enum.KeyCode.F2,"F2") tryAdd(Enum.KeyCode.F3,"F3")
+        tryAdd(Enum.KeyCode.F4,"F4") tryAdd(Enum.KeyCode.F5,"F5") tryAdd(Enum.KeyCode.F6,"F6")
+        tryAdd(Enum.KeyCode.F7,"F7") tryAdd(Enum.KeyCode.F8,"F8") tryAdd(Enum.KeyCode.F9,"F9")
+        tryAdd(Enum.KeyCode.F10,"F10") tryAdd(Enum.KeyCode.F11,"F11") tryAdd(Enum.KeyCode.F12,"F12")
+        tryAdd(Enum.KeyCode.LeftShift,"LShift") tryAdd(Enum.KeyCode.RightShift,"RShift")
+        tryAdd(Enum.KeyCode.LeftControl,"LCtrl") tryAdd(Enum.KeyCode.RightControl,"RCtrl")
+        tryAdd(Enum.KeyCode.LeftAlt,"LAlt") tryAdd(Enum.KeyCode.RightAlt,"RAlt")
+        tryAdd(Enum.KeyCode.Space,"Space") tryAdd(Enum.KeyCode.Tab,"Tab")
+        tryAdd(Enum.KeyCode.Return,"Enter") tryAdd(Enum.KeyCode.CapsLock,"Caps")
+        tryAdd(Enum.KeyCode.Up,"Up") tryAdd(Enum.KeyCode.Down,"Down")
+        tryAdd(Enum.KeyCode.Left,"Left") tryAdd(Enum.KeyCode.Right,"Right")
+        tryAdd(Enum.KeyCode.MouseButton3,"MB3") tryAdd(Enum.KeyCode.XButton1,"MB4") tryAdd(Enum.KeyCode.XButton2,"MB5")
+        local name = kcMap[kc]
+        if name then
+            zoomKeyCode = kc
+            zoomBinding = false
+            g.zoomBind.Text  = "["..name.."]"
+            g.zoomBind.Color = C_DIM
+        end
+        return
+    end
+    if input.KeyCode==zoomKeyCode and zoomEnabled then zoomHeld=true end
+end)
+UIS2.InputEnded:Connect(function(input)
+    if input.KeyCode==zoomKeyCode then zoomHeld=false end
+end)
+task.spawn(function()
+    local lp=PLR.LocalPlayer
+    local defaultFOV = 70
+    pcall(function()
+        local settings=RS.Players:FindFirstChild(lp.Name)
+        settings=settings and settings:FindFirstChild("Settings")
+        local fov=settings and settings:GetAttribute("DefaultFOV")
+        if fov and fov > 0 then defaultFOV = fov end
+    end)
+    if defaultFOV == 70 then
+        defaultFOV = WS.CurrentCamera.FieldOfView or 70
+    end
+    local currentFOV=defaultFOV
+    local wasZoomed=false
+    while true do
+        if zoomHeld then
+            if not wasZoomed then
+                currentFOV=WS.CurrentCamera.FieldOfView
+                wasZoomed=true
+            end
+            currentFOV=currentFOV+(zoomFOV-currentFOV)*0.2
+            WS.CurrentCamera.FieldOfView=currentFOV
+        elseif wasZoomed then
+            currentFOV=currentFOV+(defaultFOV-currentFOV)*0.2
+            WS.CurrentCamera.FieldOfView=currentFOV
+            if math.abs(currentFOV-defaultFOV)<0.5 then
+                WS.CurrentCamera.FieldOfView=defaultFOV
+                currentFOV=defaultFOV
+                wasZoomed=false
+            end
+        end
+        task.wait()
+    end
+end)
+
+-- ─── MOVE GUI ─────────────────────────────────
+local function moveGUI(nx,ny)
+    PX=nx PY=ny
+    for _,e in ipairs(allObjs) do
+        if e.isLine then e.obj.From=Vector2.new(PX,PY+e.oy) e.obj.To=Vector2.new(PX+PW,PY+e.oy)
+        else e.obj.Position=Vector2.new(PX+e.ox,PY+e.oy) end
+    end
+    g.btnBg.Position=Vector2.new(PX+PW-BTN_SIZE-3,PY+6)
+    g.btnTx.Position=Vector2.new(PX+PW-BTN_SIZE-3+3,PY+6)
+    g.tabBg.Position=Vector2.new(PX,PY)
+    g.tabBdr.Position=Vector2.new(PX,PY)
+    g.tabTx.Position=Vector2.new(PX+6,PY+3)
+end
+
+local function setGuiVisible(open)
+    guiOpen=open
+    for _,e in ipairs(allObjs) do e.obj.Visible=open end
+    g.btnBg.Visible=open g.btnTx.Visible=open
+    g.tabBg.Visible=not open g.tabBdr.Visible=not open g.tabTx.Visible=not open
+    if open then moveGUI(PX,PY)
+    else
+        for i=1,MAX_ROWS do
+            g.rows[i].name.Visible=false g.rows[i].tag.Visible=false
+            g.rows[i].reason.Visible=false g.rows[i].bg.Visible=false
+        end
+    end
+end
+
+local function refreshGUI()
+    if not guiOpen then return end
+    local mods,cheats=0,0
+    for _,e in ipairs(flaggedList) do
+        if e.tag:sub(1,3)=="MOD" then mods=mods+1 else cheats=cheats+1 end
+    end
+    g.footer.Text="◄ "..mods.." mods  |  "..cheats.." cheaters  ►"
+    g.espLbl.Text=modFound and "ESP: OFF" or "ESP: ON"
+    g.espLbl.Color=modFound and Color3.fromRGB(255,60,60) or C_GREEN
+    local maxScroll=math.max(0,#flaggedList-MAX_ROWS)
+    if scrollOffset>maxScroll then scrollOffset=maxScroll end
+    for i=1,MAX_ROWS do
+        local row=g.rows[i] local e=flaggedList[i+scrollOffset]
+        if e then
+            row.name.Text=e.name row.tag.Text=e.tag row.reason.Text=e.reason or ""
+            row.tag.Color=tagColor(e.tag)
+            row.name.Color=e.tag:sub(1,3)=="MOD" and Color3.fromRGB(255,60,60) or C_WHITE
+            row.name.Visible=true row.tag.Visible=true row.reason.Visible=true
+        else row.name.Visible=false row.tag.Visible=false row.reason.Visible=false end
+    end
+end
+
+-- ─── DRAG + SCROLL ────────────────────────────
+local dragging=false local dragOffX=0 local dragOffY=0
+local tabDragging=false local tabDragOffX=0 local tabDragOffY=0
+local tabMoved=false local prevPress=false
+task.spawn(function()
+    local lp=getLocalPlayer() local mouse=lp and lp:GetMouse()
+    while true do
+        local mx,my=0,0
+        pcall(function() mx=mouse.X my=mouse.Y end)
+        local pressing=ismouse1pressed() local clicked=pressing and not prevPress
+        if guiOpen then
+            local bx=PX+PW-BTN_SIZE-3
+            if clicked and mx>=bx and mx<=bx+BTN_SIZE and my>=PY+6 and my<=PY+6+BTN_SIZE then
+                setGuiVisible(false) prevPress=pressing task.wait() continue
+            end
+            if clicked and mx>=PX and mx<=PX+PW and my>=PY and my<=PY+HEAD_H then
+                dragging=true dragOffX=mx-PX dragOffY=my-PY
+            end
+            if not pressing then dragging=false end
+            if dragging then moveGUI(mx-dragOffX,my-dragOffY) end
+            if clicked and mx>=PX and mx<=PX+PW and my>=PY+FOOT_Y and my<=PY+FOOT_Y+FOOT_H then
+                if mx<PX+PW*0.5 then scrollOffset=math.max(0,scrollOffset-1)
+                else scrollOffset=math.min(math.max(0,#flaggedList-1),scrollOffset+1) end
+            end
+            if clicked and my>=PY+FOOT2_Y and my<=PY+FOOT2_Y+FOOT_H then
+                if mx>=PX+6 and mx<=PX+70 then invEnabled=true g.invStat.Text="INV:ON" g.invStat.Color=C_GREEN
+                elseif mx>=PX+75 and mx<=PX+145 then invEnabled=false g.invStat.Text="INV:OFF" g.invStat.Color=Color3.fromRGB(255,60,60) end
+            end
+            if clicked and my>=PY+FOOT3_Y and my<=PY+FOOT3_Y+FOOT_H then
+                if mx>=PX+6 and mx<=PX+85 then corpseEnabled=true g.corpseStat.Text="CORPSE:ON" g.corpseStat.Color=C_GREEN
+                elseif mx>=PX+90 and mx<=PX+175 then corpseEnabled=false g.corpseStat.Text="CORPSE:OFF" g.corpseStat.Color=Color3.fromRGB(255,60,60) end
+            end
+            if clicked and my>=PY+FOOT6_Y and my<=PY+FOOT6_Y+FOOT_H then
+                recoilSpreadEnabled=not recoilSpreadEnabled
+                applyRecoil(recoilSpreadEnabled)
+                local col=recoilSpreadEnabled and C_GREEN or Color3.fromRGB(255,60,60)
+                local txt=recoilSpreadEnabled and "ON" or "OFF"
+                g.recoilBtn.Text="RECOIL:"..txt g.recoilBtn.Color=col
+                g.spreadBtn.Text="SPREAD:"..txt g.spreadBtn.Color=col
+            end
+            if clicked and my>=PY+FOOT5_Y and my<=PY+FOOT5_Y+FOOT_H then
+                pcall(function()
+                    local lp=PLR.LocalPlayer
+                    local char=lp.Character
+                    if not char then
+                        g.testInvisRes.Text="no character"
+                        g.testInvisRes.Color=C_DIM
+                        return
+                    end
+                    local found=false
+                    for _,p in pairs(char:GetChildren()) do
+                        if BODY_PARTS[p.Name] then
+                            if p.Transparency>=1 then found=true end
+                        end
+                    end
+                    if found then
+                        g.testInvisRes.Text="INVIS DETECTED"
+                        g.testInvisRes.Color=Color3.fromRGB(255,60,60)
+                        sendNotif("INVIS TEST","You would be flagged MOD(INVIS)!",5)
+                    else
+                        g.testInvisRes.Text="NOT INVIS"
+                        g.testInvisRes.Color=C_GREEN
+                        sendNotif("INVIS TEST","Not invisible, all parts visible",5)
+                    end
+                end)
+            end
+
+            if clicked and my>=PY+FOOT4_Y and my<=PY+FOOT4_Y+FOOT_H then
+                if mx>=PX+6 and mx<=PX+70 then
+                    zoomStepIdx=math.max(1,zoomStepIdx-1)
+                    zoomFOV=zoomSteps[zoomStepIdx] g.zoomStat.Text="FOV:"..zoomFOV
+                elseif mx>=PX+75 and mx<=PX+140 then
+                    zoomStepIdx=math.min(#zoomSteps,zoomStepIdx+1)
+                    zoomFOV=zoomSteps[zoomStepIdx] g.zoomStat.Text="FOV:"..zoomFOV
+                elseif mx>=PX+210 and mx<=PX+245 then
+                    zoomEnabled=not zoomEnabled
+                    if not zoomEnabled then zoomHeld=false end
+                    g.zoomEnStat.Text=zoomEnabled and "Z:ON" or "Z:OFF"
+                    g.zoomEnStat.Color=zoomEnabled and C_GREEN or Color3.fromRGB(255,60,60)
+                elseif mx>=PX+148 and mx<=PX+185 then
+                    g.zoomBind.Text="[?]"
+                    g.zoomBind.Color=Color3.fromRGB(255,200,0)
+                    task.spawn(function()
+                        task.wait(0.5)
+                        zoomBinding=true
+                    end)
+                end
+            end
+        else
+            if clicked and mx>=PX and mx<=PX+TAB_W and my>=PY and my<=PY+TAB_H then
+                tabDragging=true tabDragOffX=mx-PX tabDragOffY=my-PY tabMoved=false
+            end
+            if tabDragging then
+                local nx=mx-tabDragOffX local ny=my-tabDragOffY
+                if math.abs(nx-PX)>3 or math.abs(ny-PY)>3 then tabMoved=true end
+                PX=nx PY=ny
+                g.tabBg.Position=Vector2.new(PX,PY) g.tabBdr.Position=Vector2.new(PX,PY) g.tabTx.Position=Vector2.new(PX+6,PY+3)
+            end
+            if not pressing and tabDragging then
+                tabDragging=false if not tabMoved then setGuiVisible(true) end
+            end
+        end
+        refreshGUI() prevPress=pressing task.wait()
+    end
+end)
+
+-- ─── PLAYER LEAVE ─────────────────────────────
+PLR.PlayerRemoving:Connect(function(player)
+    for i=#flaggedList,1,-1 do if flaggedList[i].name==player.Name then table.remove(flaggedList,i) end end
+    Moderators[player.Name]=nil Cheaters[player.Name]=nil cheaterKDR[player.Name]=nil
+    espReason[player.Name]=nil modWarnings[player.Name]=nil checkedPremium[player.Name]=nil
+    if espObjs[player.Name] then espObjs[player.Name].tag.Visible=false espObjs[player.Name]=nil end
+end)
+
+-- ─── ESP LOOP ─────────────────────────────────
+task.spawn(function() while true do pcall(updateESP) task.wait(0) end end)
+
+-- ─── MAIN SCAN LOOP ───────────────────────────
+task.spawn(function()
+    print("[Detector] Loaded")
+    while true do
+        g.status.Text="Scanning..." g.status.Color=C_DIM
+        local ok,err=pcall(r46_0)
+        if not ok then g.status.Text="Error" g.status.Color=Color3.fromRGB(255,60,60)
+        else g.status.Text="Active" g.status.Color=C_GREEN end
+        refreshGUI() task.wait(CHECK_INTERVAL)
+    end
+end)
+
+-- ─── PLAYER INVENTORY HOVER ESP ───────────────
+local sqrt2=math.sqrt
+local invPool={} local invLast=0
+local C_INAME=Color3.fromRGB(102,204,255)
+local C_IITEM=Color3.fromRGB(200,200,200)
+local HOVER_R=60
+
+-- ─── CORPSE ESP ───────────────────────────────
+local cLines={} local cTexts={}
+local cLastL=0 local cLastT=0
+local function cLine(i)
+    if not cLines[i] then local l=Drawing.new("Line") l.Thickness=1 l.Visible=false cLines[i]=l end
+    return cLines[i]
+end
+local function cText(i)
+    if not cTexts[i] then local t=Drawing.new("Text") t.Outline=true t.Center=true t.Font=Drawing.Fonts.System t.Visible=false cTexts[i]=t end
+    return cTexts[i]
+end
+
+-- ─── SHARED FRAME (inv + corpse, one WorldToScreen pass) ──────────────────
+task.spawn(function()
+    while true do
+        local lp=PLR.LocalPlayer
+        local mouse=lp and lp:GetMouse()
+        local mx=mouse and mouse.X or 0
+        local my=mouse and mouse.Y or 0
+
+        -- compute best player dist
+        local bestPlayerDist=math.huge
+        local bestCorpseDist=math.huge
+
+        if invEnabled then
+            local repPlayers=RS:FindFirstChild("Players")
+            local usedIdx=0
+            local closest,closestDist,closestSX,closestBotY=nil,HOVER_R,0,0
+            if repPlayers then
+                for _,player in ipairs(PLR:GetPlayers()) do
+                    if player==lp then continue end
+                    local char=player.Character
+                    local hrp=char and char:FindFirstChild("HumanoidRootPart")
+                    local hum=char and char:FindFirstChildOfClass("Humanoid")
+                    if not(hrp and hum and hum.Health>0) then continue end
+                    local sp,on=WorldToScreen(hrp.Position+Vector3.new(0,1,0))
+                    if not on then continue end
+                    local dx,dy=sp.X-mx,sp.Y-my
+                    local d=math.sqrt(dx*dx+dy*dy)
+                    if d<bestPlayerDist then bestPlayerDist=d end
+                    if d<closestDist then
+                        closestDist=d closest=player closestSX=sp.X
+                        local sp2,on2=WorldToScreen(hrp.Position-Vector3.new(0,3,0))
+                        closestBotY=on2 and sp2.Y or (sp.Y+60)
+                    end
+                end
+            end
+            -- only draw player inv if player is closer than any corpse
+            if corpseEnabled then
+                local dropped=WS:FindFirstChild("DroppedItems")
+                if dropped then
+                    for _,model in ipairs(dropped:GetChildren()) do
+                        if model.ClassName~="Model" then continue end
+                        if not model:FindFirstChild("Inventory") then continue end
+                        local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
+                        local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
+                        if not on1 then continue end
+                        local d=math.sqrt((sp1.X-mx)^2+(sp1.Y-my)^2)
+                        if d<bestCorpseDist then bestCorpseDist=d end
+                    end
+                end
+            end
+            local playerWins = bestPlayerDist<=HOVER_R and (not corpseEnabled or bestPlayerDist<=bestCorpseDist)
+            if playerWins and closest and repPlayers then
+                local pdata=repPlayers:FindFirstChild(closest.Name)
+                local inv=pdata and pdata:FindFirstChild("Inventory")
+                if inv then
+                    local sy2=closestBotY+8
+                    local function draw(x,y,text,col,sz)
+                        usedIdx=usedIdx+1
+                        local t=invPool[usedIdx]
+                        if not t then t=Drawing.new("Text") t.Outline=true t.Center=true t.Font=Drawing.Fonts.System invPool[usedIdx]=t end
+                        t.Text=text t.Position=Vector2.new(x,y) t.Size=sz or 13 t.Color=col t.Visible=true
+                    end
+                    draw(closestSX,sy2,"[ "..closest.Name.." ]",C_INAME,13) sy2=sy2+15
+                    for _,item in ipairs(inv:GetChildren()) do
+                        if item.Name~="" then draw(closestSX,sy2,item.Name,C_IITEM,11) sy2=sy2+12 end
+                    end
+                end
+            end
+            for i=usedIdx+1,invLast do if invPool[i] then invPool[i].Visible=false end end
+            invLast=usedIdx
+        else
+            for i=1,invLast do if invPool[i] then invPool[i].Visible=false end end
+            invLast=0
+        end
+
+        -- corpse ESP
+        local lIdx,tIdx=0,0
+        if corpseEnabled then
+            local corpseWins = not invEnabled or bestCorpseDist<bestPlayerDist or bestPlayerDist>HOVER_R
+            local dropped=WS:FindFirstChild("DroppedItems")
+            if dropped then
+                local droppedChildren=dropped:GetChildren()
+                local closestModel=nil local closestDist2=HOVER_R
+                for _,model in ipairs(droppedChildren) do
+                    if model.ClassName~="Model" then continue end
+                    if not model:FindFirstChild("Inventory") then continue end
+                    local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
+                    local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
+                    if not on1 then continue end
+                    local dx,dy=sp1.X-mx,sp1.Y-my
+                    local d=math.sqrt(dx*dx+dy*dy)
+                    if d<closestDist2 then closestDist2=d closestModel=model end
+                end
+                for _,model in ipairs(droppedChildren) do
+                    if model.ClassName~="Model" then continue end
+                    local inv=model:FindFirstChild("Inventory") if not inv then continue end
+                    local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
+                    local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
+                    local sp2,on2=WorldToScreen(torso.Position-Vector3.new(0,3.0,0))
+                    if not on1 then continue end
+                    local top=on2 and math.min(sp1.Y,sp2.Y) or sp1.Y-40
+                    local bot=on2 and math.max(sp1.Y,sp2.Y) or sp1.Y+40
+                    local boxH=math.max(bot-top,20) local boxW=boxH*0.55
+                    local sx=sp1.X local left=sx-boxW*0.5
+                    local col=Color3.fromRGB(255,60,60)
+                    lIdx=lIdx+1 local l1=cLine(lIdx) l1.From=Vector2.new(left,top)       l1.To=Vector2.new(left+boxW,top)  l1.Color=col l1.Visible=true
+                    lIdx=lIdx+1 local l2=cLine(lIdx) l2.From=Vector2.new(left+boxW,top)  l2.To=Vector2.new(left+boxW,bot)  l2.Color=col l2.Visible=true
+                    lIdx=lIdx+1 local l3=cLine(lIdx) l3.From=Vector2.new(left+boxW,bot)  l3.To=Vector2.new(left,bot)       l3.Color=col l3.Visible=true
+                    lIdx=lIdx+1 local l4=cLine(lIdx) l4.From=Vector2.new(left,bot)        l4.To=Vector2.new(left,top)       l4.Color=col l4.Visible=true
+                    tIdx=tIdx+1 local t=cText(tIdx)
+                    t.Text=model.Name t.Position=Vector2.new(sx,top-14) t.Size=12
+                    t.Color=Color3.fromRGB(102,204,255) t.Visible=true
+                    if model==closestModel and corpseWins then
+                        local sy2=bot+8
+                        for _,item in ipairs(inv:GetChildren()) do
+                            if item.Name~="" then
+                                tIdx=tIdx+1 local ti=cText(tIdx)
+                                ti.Text=item.Name ti.Position=Vector2.new(sx,sy2) ti.Size=11 ti.Color=Color3.fromRGB(200,200,200) ti.Visible=true
+                                sy2=sy2+12
+                                local ni=item:FindFirstChild("Inventory")
+                                if ni then
+                                    for _,nested in ipairs(ni:GetChildren()) do
+                                        if nested.Name~="" then
+                                            tIdx=tIdx+1 local tn=cText(tIdx)
+                                            tn.Text="  "..nested.Name tn.Position=Vector2.new(sx,sy2) tn.Size=11 tn.Color=Color3.fromRGB(200,200,200) tn.Visible=true
+                                            sy2=sy2+12
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        for i=lIdx+1,cLastL do if cLines[i] then cLines[i].Visible=false end end
+        for i=tIdx+1,cLastT do if cTexts[i] then cTexts[i].Visible=false end end
+        cLastL=lIdx cLastT=tIdx
+
+        task.wait(0)
+    end
+end)
