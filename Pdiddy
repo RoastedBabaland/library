@@ -128,7 +128,6 @@ local function applySpread(on)
             local d=AMMO_DEFAULTS[ammo.Name]
             if on then
                 ammo:SetAttribute("ProjectileDrop",0)
-                ammo:SetAttribute("MuzzleVelocity",9999)
                 ammo:SetAttribute("Drag",0.001)
                 if ammo:GetAttribute("AccuracyDeviation")~=nil then
                     ammo:SetAttribute("AccuracyDeviation",0)
@@ -136,7 +135,6 @@ local function applySpread(on)
             else
                 if d then
                     ammo:SetAttribute("ProjectileDrop",d.ProjectileDrop)
-                    ammo:SetAttribute("MuzzleVelocity",d.MuzzleVelocity)
                     ammo:SetAttribute("Drag",d.Drag)
                     if d.AccuracyDeviation then ammo:SetAttribute("AccuracyDeviation",d.AccuracyDeviation) end
                 end
@@ -599,7 +597,7 @@ task.spawn(function() while true do pcall(updateESP) task.wait(0) end end)
 
 -- ─── MAIN SCAN LOOP ───────────────────────────
 task.spawn(function()
-    print("[Nigga Detector] Loaded")
+    print("[Detector] Loaded")
     while true do
         g.status.Text="Scanning..." g.status.Color=C_DIM
         local ok,err=pcall(r46_0)
