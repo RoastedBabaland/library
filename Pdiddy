@@ -176,7 +176,7 @@ local function r43_0(player, localPlayer)
         espReason[player.Name]=tag.." "..reason
         addToList(player.Name,tag,reason)
         sendNotif("Cheat | Detector ("..tag..")","Player: "..player.Name.." suspected! ("..reason..")",5)
-        print("Cheat Detector ("..tag..") "..player.Name.." "..reason)
+        print("Nigga Detector ("..tag..") "..player.Name.." "..reason)
     end
     if kills>=15 and kdr>=5 then flag("CHEATER(100%)","KDR:"..kdr) return end
     if kills>=400 and hours<30 then flag("CHEATER(G)","K:"..kills.." H:"..hours) return end
@@ -597,7 +597,7 @@ task.spawn(function() while true do pcall(updateESP) task.wait(0) end end)
 
 -- ─── MAIN SCAN LOOP ───────────────────────────
 task.spawn(function()
-    print("[Detector] Loaded")
+    print("[Nigga Detector] Loaded")
     while true do
         g.status.Text="Scanning..." g.status.Color=C_DIM
         local ok,err=pcall(r46_0)
