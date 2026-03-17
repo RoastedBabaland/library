@@ -416,19 +416,17 @@ UIS2.InputEnded:Connect(function(input)
 end)
 task.spawn(function()
     local lp=PLR.LocalPlayer
-    local defaultFOV = 70
-    pcall(function()
-        local settings=RS.Players:FindFirstChild(lp.Name)
-        settings=settings and settings:FindFirstChild("Settings")
-        local fov=settings and settings:GetAttribute("DefaultFOV")
-        if fov and fov > 0 then defaultFOV = fov end
-    end)
-    if defaultFOV == 70 then
-        defaultFOV = WS.CurrentCamera.FieldOfView or 70
-    end
-    local currentFOV=defaultFOV
+    local currentFOV=WS.CurrentCamera.FieldOfView or 70
+    local defaultFOV=currentFOV
     local wasZoomed=false
     while true do
+        -- always read defaultFOV fresh from settings so it stays accurate
+        pcall(function()
+            local settings=RS.Players:FindFirstChild(lp.Name)
+            settings=settings and settings:FindFirstChild("Settings")
+            local fov=settings and settings:GetAttribute("DefaultFOV")
+            if fov and fov>0 then defaultFOV=fov end
+        end)
         if zoomHeld then
             if not wasZoomed then
                 currentFOV=WS.CurrentCamera.FieldOfView
