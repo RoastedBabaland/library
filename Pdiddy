@@ -599,7 +599,7 @@ task.spawn(function() while true do pcall(updateESP) task.wait(0) end end)
 
 -- ─── MAIN SCAN LOOP ───────────────────────────
 task.spawn(function()
-    print("[Nigga Detector] Loaded")
+    print("[Detector] Loaded")
     while true do
         g.status.Text="Scanning..." g.status.Color=C_DIM
         local ok,err=pcall(r46_0)
@@ -629,22 +629,25 @@ local function cText(i)
 end
 
 -- ─── SHARED FRAME (inv + corpse, one WorldToScreen pass) ──────────────────
+local C_BOX=Color3.fromRGB(255,60,60)
+local C_CNAME=Color3.fromRGB(102,204,255)
+local C_LOOT=Color3.fromRGB(200,200,200)
 task.spawn(function()
     while true do
         local lp=PLR.LocalPlayer
         local mouse=lp and lp:GetMouse()
         local mx=mouse and mouse.X or 0
         local my=mouse and mouse.Y or 0
+        local usedIdx=0
+        local lIdx,tIdx=0,0
 
-        -- compute best player dist
+        -- ── PLAYER INV ──
         local bestPlayerDist=math.huge
-        local bestCorpseDist=math.huge
-
+        local closest,closestSX,closestBotY=nil,0,0
         if invEnabled then
             local repPlayers=RS:FindFirstChild("Players")
-            local usedIdx=0
-            local closest,closestDist,closestSX,closestBotY=nil,HOVER_R,0,0
             if repPlayers then
+                local closestDist=HOVER_R
                 for _,player in ipairs(PLR:GetPlayers()) do
                     if player==lp then continue end
                     local char=player.Character
@@ -663,22 +666,74 @@ task.spawn(function()
                     end
                 end
             end
-            -- only draw player inv if player is closer than any corpse
-            if corpseEnabled then
-                local dropped=WS:FindFirstChild("DroppedItems")
-                if dropped then
-                    for _,model in ipairs(dropped:GetChildren()) do
-                        if model.ClassName~="Model" then continue end
-                        if not model:FindFirstChild("Inventory") then continue end
-                        local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
-                        local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
-                        if not on1 then continue end
-                        local d=math.sqrt((sp1.X-mx)^2+(sp1.Y-my)^2)
-                        if d<bestCorpseDist then bestCorpseDist=d end
+        end
+
+        -- ── CORPSE ESP (single pass with cached screen pos) ──
+        local bestCorpseDist=math.huge
+        local closestModel=nil
+        if corpseEnabled then
+            local dropped=WS:FindFirstChild("DroppedItems")
+            if dropped then
+                local droppedChildren=dropped:GetChildren()
+                -- cache screen positions for all corpses in one pass
+                local corpseCache={}
+                for _,model in ipairs(droppedChildren) do
+                    if model.ClassName~="Model" then continue end
+                    local inv=model:FindFirstChild("Inventory") if not inv then continue end
+                    local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
+                    local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
+                    if not on1 then continue end
+                    local sp2,on2=WorldToScreen(torso.Position-Vector3.new(0,3.0,0))
+                    local top=on2 and math.min(sp1.Y,sp2.Y) or sp1.Y-40
+                    local bot=on2 and math.max(sp1.Y,sp2.Y) or sp1.Y+40
+                    local dx,dy=sp1.X-mx,sp1.Y-my
+                    local d=math.sqrt(dx*dx+dy*dy)
+                    if d<bestCorpseDist then bestCorpseDist=d end
+                    if d<HOVER_R and d<(closestModel and bestCorpseDist or math.huge) then
+                        closestModel=model
+                    end
+                    corpseCache[#corpseCache+1]={model=model,inv=inv,sx=sp1.X,top=top,bot=bot}
+                end
+                -- draw from cache
+                local corpseWins=not invEnabled or bestCorpseDist<bestPlayerDist or bestPlayerDist>HOVER_R
+                for _,c in ipairs(corpseCache) do
+                    local top,bot,sx=c.top,c.bot,c.sx
+                    local boxH=math.max(bot-top,20) local boxW=boxH*0.55
+                    local left=sx-boxW*0.5
+                    lIdx=lIdx+1 local l1=cLine(lIdx) l1.From=Vector2.new(left,top)      l1.To=Vector2.new(left+boxW,top) l1.Color=C_BOX l1.Visible=true
+                    lIdx=lIdx+1 local l2=cLine(lIdx) l2.From=Vector2.new(left+boxW,top) l2.To=Vector2.new(left+boxW,bot) l2.Color=C_BOX l2.Visible=true
+                    lIdx=lIdx+1 local l3=cLine(lIdx) l3.From=Vector2.new(left+boxW,bot) l3.To=Vector2.new(left,bot)      l3.Color=C_BOX l3.Visible=true
+                    lIdx=lIdx+1 local l4=cLine(lIdx) l4.From=Vector2.new(left,bot)       l4.To=Vector2.new(left,top)      l4.Color=C_BOX l4.Visible=true
+                    tIdx=tIdx+1 local nt=cText(tIdx)
+                    nt.Text=c.model.Name nt.Position=Vector2.new(sx,top-14) nt.Size=12 nt.Color=C_CNAME nt.Visible=true
+                    if c.model==closestModel and corpseWins then
+                        local sy2=bot+8
+                        for _,item in ipairs(c.inv:GetChildren()) do
+                            if item.Name~="" then
+                                tIdx=tIdx+1 local ti=cText(tIdx)
+                                ti.Text=item.Name ti.Position=Vector2.new(sx,sy2) ti.Size=11 ti.Color=C_LOOT ti.Visible=true
+                                sy2=sy2+12
+                                local ni=item:FindFirstChild("Inventory")
+                                if ni then
+                                    for _,nested in ipairs(ni:GetChildren()) do
+                                        if nested.Name~="" then
+                                            tIdx=tIdx+1 local tn=cText(tIdx)
+                                            tn.Text="  "..nested.Name tn.Position=Vector2.new(sx,sy2) tn.Size=11 tn.Color=C_LOOT tn.Visible=true
+                                            sy2=sy2+12
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
             end
-            local playerWins = bestPlayerDist<=HOVER_R and (not corpseEnabled or bestPlayerDist<=bestCorpseDist)
+        end
+
+        -- draw player inv (after corpse dist is known)
+        if invEnabled then
+            local repPlayers=RS:FindFirstChild("Players")
+            local playerWins=bestPlayerDist<=HOVER_R and (not corpseEnabled or bestPlayerDist<=bestCorpseDist)
             if playerWins and closest and repPlayers then
                 local pdata=repPlayers:FindFirstChild(closest.Name)
                 local inv=pdata and pdata:FindFirstChild("Inventory")
@@ -696,73 +751,10 @@ task.spawn(function()
                     end
                 end
             end
-            for i=usedIdx+1,invLast do if invPool[i] then invPool[i].Visible=false end end
-            invLast=usedIdx
-        else
-            for i=1,invLast do if invPool[i] then invPool[i].Visible=false end end
-            invLast=0
         end
 
-        -- corpse ESP
-        local lIdx,tIdx=0,0
-        if corpseEnabled then
-            local corpseWins = not invEnabled or bestCorpseDist<bestPlayerDist or bestPlayerDist>HOVER_R
-            local dropped=WS:FindFirstChild("DroppedItems")
-            if dropped then
-                local droppedChildren=dropped:GetChildren()
-                local closestModel=nil local closestDist2=HOVER_R
-                for _,model in ipairs(droppedChildren) do
-                    if model.ClassName~="Model" then continue end
-                    if not model:FindFirstChild("Inventory") then continue end
-                    local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
-                    local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
-                    if not on1 then continue end
-                    local dx,dy=sp1.X-mx,sp1.Y-my
-                    local d=math.sqrt(dx*dx+dy*dy)
-                    if d<closestDist2 then closestDist2=d closestModel=model end
-                end
-                for _,model in ipairs(droppedChildren) do
-                    if model.ClassName~="Model" then continue end
-                    local inv=model:FindFirstChild("Inventory") if not inv then continue end
-                    local torso=model:FindFirstChild("UpperTorso") if not torso then continue end
-                    local sp1,on1=WorldToScreen(torso.Position+Vector3.new(0,2.8,0))
-                    local sp2,on2=WorldToScreen(torso.Position-Vector3.new(0,3.0,0))
-                    if not on1 then continue end
-                    local top=on2 and math.min(sp1.Y,sp2.Y) or sp1.Y-40
-                    local bot=on2 and math.max(sp1.Y,sp2.Y) or sp1.Y+40
-                    local boxH=math.max(bot-top,20) local boxW=boxH*0.55
-                    local sx=sp1.X local left=sx-boxW*0.5
-                    local col=Color3.fromRGB(255,60,60)
-                    lIdx=lIdx+1 local l1=cLine(lIdx) l1.From=Vector2.new(left,top)       l1.To=Vector2.new(left+boxW,top)  l1.Color=col l1.Visible=true
-                    lIdx=lIdx+1 local l2=cLine(lIdx) l2.From=Vector2.new(left+boxW,top)  l2.To=Vector2.new(left+boxW,bot)  l2.Color=col l2.Visible=true
-                    lIdx=lIdx+1 local l3=cLine(lIdx) l3.From=Vector2.new(left+boxW,bot)  l3.To=Vector2.new(left,bot)       l3.Color=col l3.Visible=true
-                    lIdx=lIdx+1 local l4=cLine(lIdx) l4.From=Vector2.new(left,bot)        l4.To=Vector2.new(left,top)       l4.Color=col l4.Visible=true
-                    tIdx=tIdx+1 local t=cText(tIdx)
-                    t.Text=model.Name t.Position=Vector2.new(sx,top-14) t.Size=12
-                    t.Color=Color3.fromRGB(102,204,255) t.Visible=true
-                    if model==closestModel and corpseWins then
-                        local sy2=bot+8
-                        for _,item in ipairs(inv:GetChildren()) do
-                            if item.Name~="" then
-                                tIdx=tIdx+1 local ti=cText(tIdx)
-                                ti.Text=item.Name ti.Position=Vector2.new(sx,sy2) ti.Size=11 ti.Color=Color3.fromRGB(200,200,200) ti.Visible=true
-                                sy2=sy2+12
-                                local ni=item:FindFirstChild("Inventory")
-                                if ni then
-                                    for _,nested in ipairs(ni:GetChildren()) do
-                                        if nested.Name~="" then
-                                            tIdx=tIdx+1 local tn=cText(tIdx)
-                                            tn.Text="  "..nested.Name tn.Position=Vector2.new(sx,sy2) tn.Size=11 tn.Color=Color3.fromRGB(200,200,200) tn.Visible=true
-                                            sy2=sy2+12
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+        for i=usedIdx+1,invLast do if invPool[i] then invPool[i].Visible=false end end
+        invLast=usedIdx
         for i=lIdx+1,cLastL do if cLines[i] then cLines[i].Visible=false end end
         for i=tIdx+1,cLastT do if cTexts[i] then cTexts[i].Visible=false end end
         cLastL=lIdx cLastT=tIdx
