@@ -38,8 +38,7 @@ local FOOT2_Y = FOOT_Y  + FOOT_H
 local FOOT3_Y = FOOT2_Y + FOOT_H
 local FOOT4_Y = FOOT3_Y + FOOT_H
 local FOOT5_Y = FOOT4_Y + FOOT_H
-local FOOT6_Y = FOOT5_Y + FOOT_H
-local MAIN_H  = FOOT6_Y + FOOT_H + 2
+local MAIN_H  = FOOT5_Y + FOOT_H + 2
 local PX = 10
 local PY = 60
 
@@ -79,32 +78,67 @@ local function disableWallhacks()
     pcall(function() ESP.Distance.Enabled=false end) pcall(function() ESP.Skeleton.Enabled=false end)
     pcall(function() Chams.Players.Enabled=false end) pcall(function() Chams.World.Enabled=false end)
 end
-local recoilOriginal={} local spreadOriginal={}
+-- hardcoded defaults from dump
+local AMMO_DEFAULTS = {
+    ["762x39AP"]    = {RecoilStrength=271, ProjectileDrop=4.6, MuzzleVelocity=2300,  Drag=0.013},
+    ["9x39Z"]       = {RecoilStrength=211, ProjectileDrop=4.6, MuzzleVelocity=1350,  Drag=0.013},
+    ["127x108Tracer"]={RecoilStrength=400, ProjectileDrop=4.6, MuzzleVelocity=3000,  Drag=0.013},
+    ["9x39AP"]      = {RecoilStrength=191, ProjectileDrop=4.6, MuzzleVelocity=1270,  Drag=0.013},
+    ["762x54Tracer"]= {RecoilStrength=240, ProjectileDrop=4.6, MuzzleVelocity=2655,  Drag=0.013},
+    ["762x39Tracer"]= {RecoilStrength=252, ProjectileDrop=4.6, MuzzleVelocity=2145,  Drag=0.013},
+    ["556x45Tracer"]= {RecoilStrength=175, ProjectileDrop=4.6, MuzzleVelocity=2799,  Drag=0.013},
+    ["762x54AP"]    = {RecoilStrength=260, ProjectileDrop=4.6, MuzzleVelocity=2820,  Drag=0.013},
+    ["12gaAP"]      = {RecoilStrength=345, ProjectileDrop=4.6, MuzzleVelocity=1875,  Drag=0.013},
+    ["12gaBuckshot"]= {RecoilStrength=nil, ProjectileDrop=4.6, MuzzleVelocity=1275,  Drag=0.013, AccuracyDeviation=10},
+    ["9x18Tracer"]  = {RecoilStrength=70,  ProjectileDrop=4.6, MuzzleVelocity=1076,  Drag=0.013},
+    ["9x18AP"]      = {RecoilStrength=77,  ProjectileDrop=4.6, MuzzleVelocity=1149,  Drag=0.013},
+    ["762x25AP"]    = {RecoilStrength=94,  ProjectileDrop=4.6, MuzzleVelocity=1450,  Drag=0.013},
+    ["762x25Tracer"]= {RecoilStrength=87,  ProjectileDrop=4.6, MuzzleVelocity=1380,  Drag=0.013},
+    ["9x18Z"]       = {RecoilStrength=83,  ProjectileDrop=4.6, MuzzleVelocity=1210,  Drag=0.013},
+    ["9x19AP"]      = {RecoilStrength=89,  ProjectileDrop=4.6, MuzzleVelocity=1498,  Drag=0.013},
+    ["9x19Tracer"]  = {RecoilStrength=81,  ProjectileDrop=4.6, MuzzleVelocity=1395,  Drag=0.013},
+    ["12gaFlechette"]={RecoilStrength=nil, ProjectileDrop=4.6, MuzzleVelocity=1020,  Drag=0.013, AccuracyDeviation=17},
+    ["45AP"]        = {RecoilStrength=81,  ProjectileDrop=4.6, MuzzleVelocity=1545,  Drag=0.013},
+    ["12gaSlug"]    = {RecoilStrength=255, ProjectileDrop=4.6, MuzzleVelocity=1215,  Drag=0.013},
+    ["338T"]        = {RecoilStrength=240, ProjectileDrop=4.6, MuzzleVelocity=2975,  Drag=0.013},
+    ["338AP"]       = {RecoilStrength=240, ProjectileDrop=4.6, MuzzleVelocity=3045,  Drag=0.013},
+    ["556x45AP"]    = {RecoilStrength=198, ProjectileDrop=4.6, MuzzleVelocity=3000,  Drag=0.013},
+    ["45Tracer"]    = {RecoilStrength=81,  ProjectileDrop=4.6, MuzzleVelocity=1395,  Drag=0.013},
+    ["762x51Tracer"]= {RecoilStrength=235, ProjectileDrop=4.6, MuzzleVelocity=2460,  Drag=0.013},
+    ["762x51AP"]    = {RecoilStrength=260, ProjectileDrop=4.6, MuzzleVelocity=2700,  Drag=0.013},
+    ["145x114Tracer"]={RecoilStrength=400, ProjectileDrop=4.6, MuzzleVelocity=3000,  Drag=0.013},
+    ["PG7"]         = {RecoilStrength=198, ProjectileDrop=4.6, MuzzleVelocity=600,   Drag=0.013},
+    ["S8KO"]        = {RecoilStrength=198, ProjectileDrop=4.6, MuzzleVelocity=600,   Drag=0.013},
+}
 local function applyRecoil(on)
     pcall(function()
         for _,ammo in ipairs(RS.AmmoTypes:GetChildren()) do
+            local d=AMMO_DEFAULTS[ammo.Name]
             if on then
-                if not recoilOriginal[ammo] then recoilOriginal[ammo]=ammo:GetAttribute("RecoilStrength") end
-                if not spreadOriginal[ammo] then
-                    spreadOriginal[ammo]={
-                        AccuracyDeviation=ammo:GetAttribute("AccuracyDeviation"),
-                        ProjectileDrop=ammo:GetAttribute("ProjectileDrop"),
-                        MuzzleVelocity=ammo:GetAttribute("MuzzleVelocity"),
-                        Drag=ammo:GetAttribute("Drag"),
-                    }
-                end
                 ammo:SetAttribute("RecoilStrength",0)
-                ammo:SetAttribute("AccuracyDeviation",0)
+            else
+                if d and d.RecoilStrength then ammo:SetAttribute("RecoilStrength",d.RecoilStrength) end
+            end
+        end
+    end)
+end
+local function applySpread(on)
+    pcall(function()
+        for _,ammo in ipairs(RS.AmmoTypes:GetChildren()) do
+            local d=AMMO_DEFAULTS[ammo.Name]
+            if on then
                 ammo:SetAttribute("ProjectileDrop",0)
                 ammo:SetAttribute("MuzzleVelocity",9999)
                 ammo:SetAttribute("Drag",0.001)
+                if ammo:GetAttribute("AccuracyDeviation")~=nil then
+                    ammo:SetAttribute("AccuracyDeviation",0)
+                end
             else
-                if recoilOriginal[ammo] then ammo:SetAttribute("RecoilStrength",recoilOriginal[ammo]) end
-                if spreadOriginal[ammo] then
-                    ammo:SetAttribute("AccuracyDeviation",spreadOriginal[ammo].AccuracyDeviation)
-                    ammo:SetAttribute("ProjectileDrop",spreadOriginal[ammo].ProjectileDrop)
-                    ammo:SetAttribute("MuzzleVelocity",spreadOriginal[ammo].MuzzleVelocity)
-                    ammo:SetAttribute("Drag",spreadOriginal[ammo].Drag)
+                if d then
+                    ammo:SetAttribute("ProjectileDrop",d.ProjectileDrop)
+                    ammo:SetAttribute("MuzzleVelocity",d.MuzzleVelocity)
+                    ammo:SetAttribute("Drag",d.Drag)
+                    if d.AccuracyDeviation then ammo:SetAttribute("AccuracyDeviation",d.AccuracyDeviation) end
                 end
             end
         end
@@ -319,15 +353,12 @@ g.zoomOut =regObj(tx("6 ZOOM -",PX+75,PY+FOOT4_Y+3,10,Color3.fromRGB(255,60,60),
 g.zoomBind=regObj(tx("[Z]",PX+148,PY+FOOT4_Y+3,10,C_DIM,false,Drawing.Fonts.SystemBold),148,FOOT4_Y+3)
 g.zoomStat=regObj(tx("FOV:50",PX+PW-55,PY+FOOT4_Y+3,10,C_DIM,false,Drawing.Fonts.SystemBold),PW-55,FOOT4_Y+3)
 g.zoomEnStat=regObj(tx("Z:ON",PX+210,PY+FOOT4_Y+3,10,C_GREEN,false,Drawing.Fonts.SystemBold),210,FOOT4_Y+3)
-g.div7    =regLine(ln(PX,PY+FOOT5_Y,PX+PW,PY+FOOT5_Y),FOOT5_Y)
-g.testInvis=regObj(tx("TEST INVIS",PX+6,PY+FOOT5_Y+3,10,Color3.fromRGB(255,200,0),false,Drawing.Fonts.SystemBold),6,FOOT5_Y+3)
-g.testInvisRes=regObj(tx("",PX+150,PY+FOOT5_Y+3,10,C_DIM,false,Drawing.Fonts.SystemBold),150,FOOT5_Y+3)
-g.div8      =regLine(ln(PX,PY+FOOT6_Y,PX+PW,PY+FOOT6_Y),FOOT6_Y)
-g.recoilBtn =regObj(tx("RECOIL:OFF",PX+6,PY+FOOT6_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),6,FOOT6_Y+3)
-g.spreadBtn =regObj(tx("SPREAD:OFF",PX+110,PY+FOOT6_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),110,FOOT6_Y+3)
+g.div7      =regLine(ln(PX,PY+FOOT5_Y,PX+PW,PY+FOOT5_Y),FOOT5_Y)
+g.recoilBtn =regObj(tx("RECOIL:OFF",PX+6,PY+FOOT5_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),6,FOOT5_Y+3)
+g.spreadBtn =regObj(tx("SPREAD:OFF",PX+110,PY+FOOT5_Y+3,10,Color3.fromRGB(255,60,60),false,Drawing.Fonts.SystemBold),110,FOOT5_Y+3)
 
 
-local invEnabled=false local corpseEnabled=false local recoilSpreadEnabled=false
+local invEnabled=false local corpseEnabled=false local recoilEnabled=false local spreadEnabled=false
 
 local zoomSteps = {1,5,10,15,20,30,40,50,60,70,80,90}
 local zoomStepIdx = 8
@@ -502,39 +533,18 @@ task.spawn(function()
                 if mx>=PX+6 and mx<=PX+85 then corpseEnabled=true g.corpseStat.Text="CORPSE:ON" g.corpseStat.Color=C_GREEN
                 elseif mx>=PX+90 and mx<=PX+175 then corpseEnabled=false g.corpseStat.Text="CORPSE:OFF" g.corpseStat.Color=Color3.fromRGB(255,60,60) end
             end
-            if clicked and my>=PY+FOOT6_Y and my<=PY+FOOT6_Y+FOOT_H then
-                recoilSpreadEnabled=not recoilSpreadEnabled
-                applyRecoil(recoilSpreadEnabled)
-                local col=recoilSpreadEnabled and C_GREEN or Color3.fromRGB(255,60,60)
-                local txt=recoilSpreadEnabled and "ON" or "OFF"
-                g.recoilBtn.Text="RECOIL:"..txt g.recoilBtn.Color=col
-                g.spreadBtn.Text="SPREAD:"..txt g.spreadBtn.Color=col
-            end
             if clicked and my>=PY+FOOT5_Y and my<=PY+FOOT5_Y+FOOT_H then
-                pcall(function()
-                    local lp=PLR.LocalPlayer
-                    local char=lp.Character
-                    if not char then
-                        g.testInvisRes.Text="no character"
-                        g.testInvisRes.Color=C_DIM
-                        return
-                    end
-                    local found=false
-                    for _,p in pairs(char:GetChildren()) do
-                        if BODY_PARTS[p.Name] then
-                            if p.Transparency>=1 then found=true end
-                        end
-                    end
-                    if found then
-                        g.testInvisRes.Text="INVIS DETECTED"
-                        g.testInvisRes.Color=Color3.fromRGB(255,60,60)
-                        sendNotif("INVIS TEST","You would be flagged MOD(INVIS)!",5)
-                    else
-                        g.testInvisRes.Text="NOT INVIS"
-                        g.testInvisRes.Color=C_GREEN
-                        sendNotif("INVIS TEST","Not invisible, all parts visible",5)
-                    end
-                end)
+                if mx>=PX+6 and mx<=PX+105 then
+                    recoilEnabled=not recoilEnabled
+                    applyRecoil(recoilEnabled)
+                    g.recoilBtn.Text=recoilEnabled and "RECOIL:ON" or "RECOIL:OFF"
+                    g.recoilBtn.Color=recoilEnabled and C_GREEN or Color3.fromRGB(255,60,60)
+                elseif mx>=PX+110 and mx<=PX+215 then
+                    spreadEnabled=not spreadEnabled
+                    applySpread(spreadEnabled)
+                    g.spreadBtn.Text=spreadEnabled and "SPREAD:ON" or "SPREAD:OFF"
+                    g.spreadBtn.Color=spreadEnabled and C_GREEN or Color3.fromRGB(255,60,60)
+                end
             end
 
             if clicked and my>=PY+FOOT4_Y and my<=PY+FOOT4_Y+FOOT_H then
