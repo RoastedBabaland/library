@@ -599,7 +599,7 @@ task.spawn(function() while true do pcall(updateESP) task.wait(0) end end)
 
 -- ─── MAIN SCAN LOOP ───────────────────────────
 task.spawn(function()
-    print("[Detector] Loaded")
+    print("[Nigga Detector] Loaded")
     while true do
         g.status.Text="Scanning..." g.status.Color=C_DIM
         local ok,err=pcall(r46_0)
